@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f0f">
 <title>SirenCast</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -103,6 +106,9 @@ body {
   padding: 8px 0;
   border-bottom: 1px solid #222;
 }
+.area-row:last-child {
+  border-bottom: none;
+}
 .area-row.highlighted {
   font-weight: 700;
   border-right: 3px solid #f59e0b;
@@ -110,7 +116,7 @@ body {
 }
 .area-name {
   flex: 1;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -123,7 +129,7 @@ body {
   text-align: center;
 }
 .progress-bar {
-  width: 60px;
+  width: 90px;
   height: 8px;
   background: #333;
   border-radius: 4px;
@@ -163,14 +169,21 @@ body {
     <h1>🚨 SirenCast</h1>
     <span class="header-subtitle" id="header-subtitle"></span>
   </div>
+  <div id="conn-error" style="display:none;background:#7f1d1d;color:#fca5a5;border-radius:6px;padding:8px 12px;font-size:0.8rem;margin-bottom:12px;text-align:center;">
+    ⚠️ בעיית חיבור — מנסה להתחבר מחדש...
+  </div>
   <div class="area-picker">
     <label for="area-input">בחר אזור התראה</label>
     <input id="area-input" list="areas-list" placeholder="הקלד לחיפוש אזור..." autocomplete="off">
     <datalist id="areas-list"></datalist>
+    <div id="no-areas-note" style="display:none;font-size:0.8rem;color:#888;margin-top:6px;">
+      עדיין אין נתונים — הcollector צריך לרוץ כדי לאכלס את רשימת האזורים
+    </div>
   </div>
   <div id="results">
     <div class="placeholder-text">אין התראה פעילה כרגע</div>
   </div>
+  <div id="last-updated" style="text-align:center;font-size:0.75rem;color:#555;margin-top:10px;"></div>
 </div>
 <script>
 const STORAGE_KEY = 'sirencast_area';
@@ -181,6 +194,8 @@ const headerSubtitle = document.getElementById('header-subtitle');
 const resultsDiv = document.getElementById('results');
 
 let lastAreasKey = '';
+let pollErrors = 0;
+let lastPollTime = null;
 
 async function loadAreas() {
   try {
@@ -192,6 +207,7 @@ async function loadAreas() {
       opt.value = area;
       areasList.appendChild(opt);
     }
+    document.getElementById('no-areas-note').style.display = data.areas.length === 0 ? 'block' : 'none';
   } catch (e) {
     console.error('Failed to load areas:', e);
   }
@@ -251,7 +267,7 @@ function renderCat10(areas, historyData) {
     html += `
       <div class="area-row${isHighlighted ? ' highlighted' : ''}">
         <span class="area-name">${item.area}</span>
-        <span class="area-fraction">${item.count}/${total}</span>
+        <span class="area-fraction" dir="ltr">${item.count}/${total}</span>
         <div class="progress-bar">
           <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
         </div>
@@ -295,6 +311,9 @@ async function pollLive() {
   try {
     const res = await fetch('/api/live');
     const data = await res.json();
+    pollErrors = 0;
+    document.getElementById('conn-error').style.display = 'none';
+    lastPollTime = Date.now();
 
     if (!data.active) {
       lastAreasKey = '';
@@ -315,6 +334,10 @@ async function pollLive() {
     }
   } catch (e) {
     console.error('Poll error:', e);
+    pollErrors++;
+    if (pollErrors >= 3) {
+      document.getElementById('conn-error').style.display = 'block';
+    }
   }
 }
 
@@ -326,6 +349,12 @@ loadAreas();
 restoreSelection();
 setInterval(pollLive, 1000);
 pollLive();
+setInterval(() => {
+  const el = document.getElementById('last-updated');
+  if (!lastPollTime) return;
+  const sec = Math.round((Date.now() - lastPollTime) / 1000);
+  el.textContent = sec <= 2 ? 'מתעדכן...' : `עודכן לפני ${sec} שניות`;
+}, 5000);
 </script>
 </body>
 </html>
