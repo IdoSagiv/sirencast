@@ -24,3 +24,19 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now sirencast-collector
 ```
 Adjust WorkingDirectory in the service file to your install path.
+
+## Web App
+
+### Dev server
+```bash
+uvicorn web.main:app --reload --port 8000
+```
+Open http://localhost:8000 in your browser.
+
+### Systemd (production)
+```bash
+sudo cp sirencast-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sirencast-web
+```
+Adjust `WorkingDirectory` in the service file to match your install path.

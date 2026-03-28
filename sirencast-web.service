@@ -1,0 +1,15 @@
+[Unit]
+Description=SirenCast Web App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sirencast
+ExecStart=/opt/sirencast/venv/bin/uvicorn web.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
