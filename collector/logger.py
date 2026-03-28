@@ -12,7 +12,7 @@ class Logger:
 
     def write(self, alert):
         oref_id = alert["oref_id"]
-        areas = alert["areas"]
+        areas = sorted(alert["areas"])
 
         if oref_id == self._last_oref_id and areas == self._last_areas:
             return

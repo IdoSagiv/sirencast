@@ -8,6 +8,7 @@ def init():
     os.makedirs(config.DATA_DIR, exist_ok=True)
     path = os.path.join(config.DATA_DIR, "sirencast.db")
     conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
 
@@ -44,6 +45,11 @@ def init():
             alert_id INTEGER REFERENCES cat1_alerts(id),
             area TEXT
         );
+
+        CREATE INDEX IF NOT EXISTS idx_cat10_areas_snapshot ON cat10_areas(snapshot_id);
+        CREATE INDEX IF NOT EXISTS idx_cat10_snapshots_incident ON cat10_snapshots(incident_id);
+        CREATE INDEX IF NOT EXISTS idx_cat1_alerts_incident ON cat1_alerts(incident_id);
+        CREATE INDEX IF NOT EXISTS idx_cat1_areas_alert ON cat1_areas(alert_id);
     """)
     conn.commit()
     return conn
