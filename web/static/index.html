@@ -1,5 +1,133 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
-<head><meta charset="utf-8"><title>SirenCast</title></head>
-<body><h1>SirenCast</h1></body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SirenCast</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, Arial, sans-serif;
+  background: #0f0f0f;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+.container {
+  width: 100%;
+  max-width: 480px;
+  padding: 16px;
+}
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid #333;
+  margin-bottom: 16px;
+}
+.header h1 {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #888;
+  flex-shrink: 0;
+}
+.header-subtitle {
+  font-size: 0.85rem;
+  color: #aaa;
+  margin-right: auto;
+}
+/* Area picker */
+.area-picker {
+  margin-bottom: 20px;
+}
+.area-picker label {
+  display: block;
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+.area-picker input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+}
+.area-picker input:focus {
+  border-color: #555;
+}
+/* Results */
+#results {
+  background: #1a1a1a;
+  border-radius: 10px;
+  padding: 16px;
+  min-height: 60px;
+}
+.placeholder-text {
+  color: #888;
+  text-align: center;
+  padding: 20px 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <span class="status-dot" id="status-dot"></span>
+    <h1>🚨 SirenCast</h1>
+    <span class="header-subtitle" id="header-subtitle"></span>
+  </div>
+  <div class="area-picker">
+    <label for="area-input">בחר אזור התראה</label>
+    <input id="area-input" list="areas-list" placeholder="הקלד לחיפוש אזור..." autocomplete="off">
+    <datalist id="areas-list"></datalist>
+  </div>
+  <div id="results">
+    <div class="placeholder-text">אין התראה פעילה כרגע</div>
+  </div>
+</div>
+<script>
+const STORAGE_KEY = 'sirencast_area';
+const areaInput = document.getElementById('area-input');
+const areasList = document.getElementById('areas-list');
+
+async function loadAreas() {
+  try {
+    const res = await fetch('/api/areas');
+    const data = await res.json();
+    areasList.innerHTML = '';
+    for (const area of data.areas) {
+      const opt = document.createElement('option');
+      opt.value = area;
+      areasList.appendChild(opt);
+    }
+  } catch (e) {
+    console.error('Failed to load areas:', e);
+  }
+}
+
+function restoreSelection() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) areaInput.value = saved;
+}
+
+areaInput.addEventListener('input', () => {
+  localStorage.setItem(STORAGE_KEY, areaInput.value);
+});
+
+loadAreas();
+restoreSelection();
+</script>
+</body>
 </html>
