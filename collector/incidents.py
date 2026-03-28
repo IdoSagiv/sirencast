@@ -17,6 +17,7 @@ class IncidentTracker:
         self.last_oref_id = None
         self.last_areas = None
         self.cat10_ended = None
+        self.last_cat1_oref_id = None
         self._recover_state()
 
     def _recover_state(self):
@@ -102,6 +103,7 @@ class IncidentTracker:
         )
         self.incident_id = cur.lastrowid
         self.snapshot_n = 0
+        self.last_cat1_oref_id = None
         self.db.commit()
         self._store_snapshot(alert, now)
 
@@ -123,6 +125,9 @@ class IncidentTracker:
         self.db.commit()
 
     def _store_orphan_cat1(self, alert, now):
+        if alert["oref_id"] == self.last_cat1_oref_id:
+            return
+        self.last_cat1_oref_id = alert["oref_id"]
         areas = sorted(alert["areas"])
         cur = self.db.execute(
             "INSERT INTO cat1_alerts (incident_id, fired_at, oref_id) VALUES (NULL,?,?)",
@@ -137,6 +142,9 @@ class IncidentTracker:
         self.db.commit()
 
     def _link_cat1(self, alert, now):
+        if alert["oref_id"] == self.last_cat1_oref_id:
+            return
+        self.last_cat1_oref_id = alert["oref_id"]
         areas = sorted(alert["areas"])
         self.db.execute(
             "UPDATE incidents SET had_siren=1 WHERE id=?", (self.incident_id,)
@@ -163,3 +171,4 @@ class IncidentTracker:
         self.last_oref_id = None
         self.last_areas = None
         self.cat10_ended = None
+        self.last_cat1_oref_id = None
