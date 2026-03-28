@@ -39,6 +39,18 @@ body {
   background: #888;
   flex-shrink: 0;
 }
+.status-dot.cat10 {
+  background: #f59e0b;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.status-dot.cat1 {
+  background: #ef4444;
+  animation: pulse 0.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
 .header-subtitle {
   font-size: 0.85rem;
   color: #aaa;
@@ -79,6 +91,69 @@ body {
   text-align: center;
   padding: 20px 0;
 }
+.summary-line {
+  font-size: 0.95rem;
+  color: #ccc;
+  margin-bottom: 12px;
+}
+.area-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #222;
+}
+.area-row.highlighted {
+  font-weight: 700;
+  border-right: 3px solid #f59e0b;
+  padding-right: 8px;
+}
+.area-name {
+  flex: 1;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.area-fraction {
+  font-size: 0.8rem;
+  color: #aaa;
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: center;
+}
+.progress-bar {
+  width: 60px;
+  height: 8px;
+  background: #333;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.alert-box {
+  background: #ef4444;
+  color: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.siren-area-list {
+  list-style: none;
+  padding: 0;
+}
+.siren-area-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid #222;
+  font-size: 0.9rem;
+}
 </style>
 </head>
 <body>
@@ -101,6 +176,11 @@ body {
 const STORAGE_KEY = 'sirencast_area';
 const areaInput = document.getElementById('area-input');
 const areasList = document.getElementById('areas-list');
+const statusDot = document.getElementById('status-dot');
+const headerSubtitle = document.getElementById('header-subtitle');
+const resultsDiv = document.getElementById('results');
+
+let lastAreasKey = '';
 
 async function loadAreas() {
   try {
@@ -122,12 +202,130 @@ function restoreSelection() {
   if (saved) areaInput.value = saved;
 }
 
+function getUserArea() {
+  return localStorage.getItem(STORAGE_KEY) || '';
+}
+
+function getProgressColor(pct) {
+  if (pct > 50) return '#ef4444';
+  if (pct > 20) return '#f59e0b';
+  return '#22c55e';
+}
+
+function renderIdle() {
+  statusDot.className = 'status-dot';
+  headerSubtitle.textContent = '';
+  resultsDiv.innerHTML = '<div class="placeholder-text">אין התראה פעילה כרגע</div>';
+}
+
+function renderCat10(areas, historyData) {
+  statusDot.className = 'status-dot cat10';
+  headerSubtitle.textContent = `אזהרה מוקדמת — ${areas.length} אזורים`;
+
+  const userArea = getUserArea();
+  const total = historyData.total_matching_incidents;
+  let counts = historyData.counts || [];
+
+  let html = '';
+  if (total === 0) {
+    html += '<div class="summary-line">אין נתונים היסטוריים עדיין</div>';
+  } else {
+    html += `<div class="summary-line">נמצאו ${total} אירועים תואמים</div>`;
+  }
+
+  // Ensure user's area is present and shown first
+  let userEntry = counts.find(c => c.area === userArea);
+  let otherEntries = counts.filter(c => c.area !== userArea);
+  let ordered = [];
+  if (userArea && areas.includes(userArea)) {
+    if (!userEntry) userEntry = { area: userArea, count: 0, pct: 0 };
+    ordered = [userEntry, ...otherEntries];
+  } else {
+    ordered = counts;
+  }
+
+  for (const item of ordered) {
+    const isHighlighted = item.area === userArea;
+    const pct = total > 0 ? item.pct : 0;
+    const color = getProgressColor(pct);
+    html += `
+      <div class="area-row${isHighlighted ? ' highlighted' : ''}">
+        <span class="area-name">${item.area}</span>
+        <span class="area-fraction">${item.count}/${total}</span>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>`;
+  }
+
+  resultsDiv.innerHTML = html;
+}
+
+function renderCat1(areas) {
+  statusDot.className = 'status-dot cat1';
+  headerSubtitle.textContent = `אזעקה! — ${areas.length} אזורים`;
+
+  const userArea = getUserArea();
+  let html = '';
+
+  if (userArea && areas.includes(userArea)) {
+    html += '<div class="alert-box">🚨 האזור שלך בסכנה!</div>';
+  }
+
+  html += '<ul class="siren-area-list">';
+  for (const area of areas) {
+    html += `<li>${area}</li>`;
+  }
+  html += '</ul>';
+
+  resultsDiv.innerHTML = html;
+}
+
+async function fetchHistory(areas) {
+  try {
+    const res = await fetch('/api/history?areas=' + encodeURIComponent(areas.join(',')));
+    return await res.json();
+  } catch (e) {
+    console.error('Failed to fetch history:', e);
+    return { total_matching_incidents: 0, counts: [] };
+  }
+}
+
+async function pollLive() {
+  try {
+    const res = await fetch('/api/live');
+    const data = await res.json();
+
+    if (!data.active) {
+      lastAreasKey = '';
+      renderIdle();
+      return;
+    }
+
+    if (data.cat === '10') {
+      const areasKey = data.areas.join(',');
+      if (areasKey !== lastAreasKey) {
+        lastAreasKey = areasKey;
+        const history = await fetchHistory(data.areas);
+        renderCat10(data.areas, history);
+      }
+    } else if (data.cat === '1') {
+      lastAreasKey = '';
+      renderCat1(data.areas);
+    }
+  } catch (e) {
+    console.error('Poll error:', e);
+  }
+}
+
 areaInput.addEventListener('input', () => {
   localStorage.setItem(STORAGE_KEY, areaInput.value);
 });
 
 loadAreas();
 restoreSelection();
+setInterval(pollLive, 1000);
+pollLive();
 </script>
 </body>
 </html>
