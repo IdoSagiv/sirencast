@@ -1,0 +1,15 @@
+[Unit]
+Description=SirenCast Collector
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sirencast
+ExecStart=/opt/sirencast/venv/bin/python -m collector.main
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
