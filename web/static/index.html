@@ -158,6 +158,10 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.stat-label {
+  flex: 1;
+  font-size: 0.95rem;
+}
 .area-fraction {
   font-size: 0.8rem;
   color: #aaa;
@@ -473,15 +477,15 @@ function renderIdle(areaStats) {
   resultsDiv.innerHTML = `
     <div class="summary-line" style="margin-bottom:16px;">סטטיסטיקות היסטוריות לאזור</div>
     <div class="area-row">
-      <span class="area-name">הופיע באזהרה מוקדמת</span>
+      <span class="stat-label">הופיע באזהרה מוקדמת</span>
       <span class="area-fraction" dir="ltr">${s.total_incidents}x</span>
     </div>
     <div class="area-row">
-      <span class="area-name">הסתיים באזעקה כלשהי</span>
+      <span class="stat-label">הסתיים באזעקה כלשהי</span>
       <span class="area-fraction" dir="ltr">${s.had_siren_incidents}/${s.total_incidents}</span>
     </div>
     <div class="area-row" style="border-bottom:none;">
-      <span class="area-name" style="font-weight:600;">אזעקה באזור זה ספציפית</span>
+      <span class="stat-label" style="font-weight:600;">אזעקה באזור זה ספציפית</span>
       <span class="area-fraction" dir="ltr" style="color:${color};font-weight:700;">${s.area_siren_count}/${s.total_incidents}</span>
       <div class="progress-bar">
         <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
