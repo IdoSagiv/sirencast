@@ -690,29 +690,12 @@ async function pollLive() {
 }
 
 // ── Geolocation ──────────────────────────────────────────
-function matchCityToAreas(cityName) {
-  if (!cityName || !allAreas.length) return [];
-  // Normalize: strip "-X" suffix (e.g. "תל אביב-יפו" → "תל אביב")
-  const norm = cityName.split('-')[0].split('–')[0].trim();
-  return allAreas.filter(a => {
-    const base = a.includes(' - ') ? a.split(' - ')[0].trim() : a.trim();
-    return base === norm || base.includes(norm) || norm.includes(base);
-  });
-}
-
 async function resolveLocation(lat, lng) {
-  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=he`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'SirenCast/1.0' } });
+  // Uses our backend /api/locate which does nearest-city lookup
+  // against tzevaadom's cities.json (1449 exact oref area names + lat/lng)
+  const res = await fetch(`/api/locate?lat=${lat}&lng=${lng}`);
   const data = await res.json();
-  const addr = data.address || {};
-  // Try from most specific to least
-  for (const key of ['suburb', 'neighbourhood', 'quarter', 'city_district', 'city', 'town', 'village']) {
-    if (addr[key]) {
-      const matches = matchCityToAreas(addr[key]);
-      if (matches.length > 0) return { city: addr[key], matches };
-    }
-  }
-  return { city: addr.city || addr.town || '', matches: [] };
+  return data.area || null;  // exact oref area name, or null
 }
 
 async function locateMe() {
@@ -727,21 +710,11 @@ async function locateMe() {
 
   navigator.geolocation.getCurrentPosition(async (pos) => {
     try {
-      const { city, matches } = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
+      const area = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
       btn.classList.remove('locating');
-
-      if (matches.length === 1) {
-        selectArea(matches[0]);
+      if (area) {
+        selectArea(area);
         btn.classList.add('located');
-        btn.textContent = '📍';
-      } else if (matches.length > 1) {
-        // Pre-filter dropdown to matching areas
-        areaInput.removeAttribute('readonly');
-        areaInput.value = city.split('-')[0].trim();
-        renderDropdown(areaInput.value);
-        dropdownList.classList.add('open');
-        areaInput.focus();
-        btn.textContent = '📍';
       } else {
         btn.textContent = '❓';
         setTimeout(() => { btn.textContent = '📍'; }, 3000);
@@ -759,14 +732,13 @@ async function locateMe() {
 }
 
 async function autoLocate() {
-  // Auto-locate only if no area is already saved
   if (getUserArea() || !navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(async (pos) => {
     try {
-      if (getUserArea()) return; // user selected manually in the meantime
-      const { matches } = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
-      if (matches.length === 1 && !getUserArea()) {
-        selectArea(matches[0]);
+      if (getUserArea()) return;
+      const area = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
+      if (area && !getUserArea()) {
+        selectArea(area);
         document.getElementById('locate-btn').classList.add('located');
       }
     } catch (_) {}
