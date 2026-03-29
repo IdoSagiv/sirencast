@@ -73,6 +73,21 @@ def query_historical_counts(areas: list) -> dict:
     conn.close()
     return {'total_matching_incidents': total, 'counts': counts}
 
+def _get_canonical_cat10_areas(conn, incident_id: int) -> list:
+    """Return the area list from the last cat10 snapshot for an incident."""
+    last_snap = conn.execute(
+        'SELECT id FROM cat10_snapshots WHERE incident_id = ? ORDER BY id DESC LIMIT 1',
+        [incident_id]
+    ).fetchone()
+    if not last_snap:
+        return []
+    rows = conn.execute(
+        'SELECT area FROM cat10_areas WHERE snapshot_id = ? ORDER BY area',
+        [last_snap['id']]
+    ).fetchall()
+    return [r['area'] for r in rows]
+
+
 def get_incidents_for_area(area: str) -> list:
     """
     Return all incidents where the given area appeared in any cat10_snapshot,
@@ -81,6 +96,8 @@ def get_incidents_for_area(area: str) -> list:
       - id, started_at, had_siren
       - cat10_areas: areas from the last snapshot
       - cat1_areas: areas that got the siren (if had_siren)
+      - prediction: {count, total} — among prior incidents with the same cat10
+        set, how many resulted in a siren for this area
     """
     conn = get_connection()
 
@@ -97,23 +114,23 @@ def get_incidents_for_area(area: str) -> list:
         conn.close()
         return []
 
+    # Build full registry: all incidents → {started_at, had_siren, cat10_set}
+    # Used to compute predictions (what did history say before each incident)
+    all_incs = conn.execute('SELECT id, started_at, had_siren FROM incidents').fetchall()
+    inc_registry = {}  # id -> (started_at, had_siren, frozenset of areas)
+    for row in all_incs:
+        areas_list = _get_canonical_cat10_areas(conn, row['id'])
+        inc_registry[row['id']] = (row['started_at'], bool(row['had_siren']), frozenset(areas_list))
+
     result = []
     for inc_id in incident_ids:
         inc = conn.execute('SELECT * FROM incidents WHERE id = ?', [inc_id]).fetchone()
         if not inc:
             continue
 
-        last_snap = conn.execute("""
-            SELECT id FROM cat10_snapshots WHERE incident_id = ? ORDER BY id DESC LIMIT 1
-        """, [inc_id]).fetchone()
-
-        cat10_areas = []
-        if last_snap:
-            rows = conn.execute(
-                'SELECT area FROM cat10_areas WHERE snapshot_id = ? ORDER BY area',
-                [last_snap['id']]
-            ).fetchall()
-            cat10_areas = [r['area'] for r in rows]
+        cat10_areas = _get_canonical_cat10_areas(conn, inc_id)
+        this_set = frozenset(cat10_areas)
+        this_ts = inc['started_at']
 
         cat1_areas = []
         if inc['had_siren']:
@@ -125,12 +142,29 @@ def get_incidents_for_area(area: str) -> list:
             """, [inc_id]).fetchall()
             cat1_areas = [r['area'] for r in rows]
 
+        # Prediction: prior incidents with same cat10 set → siren count for area
+        prior_ids = [
+            iid for iid, (ts, _, aset) in inc_registry.items()
+            if iid != inc_id and aset == this_set and ts < this_ts
+        ]
+        if prior_ids:
+            ph = ','.join(['?' for _ in prior_ids])
+            siren_count = conn.execute(f"""
+                SELECT COUNT(DISTINCT cal.incident_id)
+                FROM cat1_alerts cal
+                JOIN cat1_areas ca ON ca.alert_id = cal.id
+                WHERE ca.area = ? AND cal.incident_id IN ({ph})
+            """, [area] + prior_ids).fetchone()[0]
+        else:
+            siren_count = 0
+
         result.append({
             'id': inc['id'],
             'started_at': inc['started_at'],
             'had_siren': bool(inc['had_siren']),
             'cat10_areas': cat10_areas,
             'cat1_areas': cat1_areas,
+            'prediction': {'count': siren_count, 'total': len(prior_ids)},
         })
 
     result.sort(key=lambda x: x['started_at'], reverse=True)
