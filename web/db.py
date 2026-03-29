@@ -120,7 +120,23 @@ def get_incidents_for_area(area: str) -> list:
         if not inc:
             continue
 
-        cat10_areas = _get_canonical_cat10_areas(conn, inc_id)
+        # Use the FIRST snapshot where this area appeared (not the last).
+        # Warnings narrow over time — the selected area may be dropped from
+        # later snapshots, making it invisible in its own history row.
+        first_snap = conn.execute("""
+            SELECT s.id FROM cat10_snapshots s
+            JOIN cat10_areas a ON a.snapshot_id = s.id
+            WHERE s.incident_id = ? AND a.area = ?
+            ORDER BY s.id ASC LIMIT 1
+        """, [inc_id, area]).fetchone()
+
+        cat10_areas = []
+        if first_snap:
+            rows = conn.execute(
+                'SELECT area FROM cat10_areas WHERE snapshot_id = ? ORDER BY area',
+                [first_snap['id']]
+            ).fetchall()
+            cat10_areas = [r['area'] for r in rows]
 
         cat1_areas = []
         if inc['had_siren']:

@@ -680,7 +680,7 @@ function renderHistory(incidents, selectedArea) {
   list.innerHTML = incidents.map((inc, idx) => {
     const dateStr = formatTs(inc.started_at);
     const sirenClass = inc.area_got_siren ? 'yes' : 'no';
-    const sirenText = inc.area_got_siren ? '🚨 אזעקה' : '✅ ללא אזעקה';
+    const sirenText = inc.area_got_siren ? '🚨 אזעקה לאזור זה' : '✅ ללא אזעקה לאזור זה';
     const areasCount = `${inc.cat10_areas.length} אזורים`;
 
     const pred = inc.prediction;
