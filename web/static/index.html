@@ -62,6 +62,7 @@ body {
 /* Area picker */
 .area-picker {
   margin-bottom: 20px;
+  position: relative;
 }
 .area-picker label {
   display: block;
@@ -81,6 +82,42 @@ body {
 }
 .area-picker input:focus {
   border-color: #555;
+}
+.dropdown-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: 100;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.dropdown-list.open {
+  display: block;
+}
+.dropdown-item {
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  border-bottom: 1px solid #2a2a2a;
+}
+.dropdown-item:last-child {
+  border-bottom: none;
+}
+.dropdown-item:hover, .dropdown-item.active {
+  background: #2a2a2a;
+}
+.dropdown-empty {
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  color: #888;
+  text-align: center;
 }
 /* Results */
 #results {
@@ -172,10 +209,10 @@ body {
   <div id="conn-error" style="display:none;background:#7f1d1d;color:#fca5a5;border-radius:6px;padding:8px 12px;font-size:0.8rem;margin-bottom:12px;text-align:center;">
     ⚠️ בעיית חיבור — מנסה להתחבר מחדש...
   </div>
-  <div class="area-picker">
+  <div class="area-picker" id="area-picker">
     <label for="area-input">בחר אזור התראה</label>
-    <input id="area-input" list="areas-list" placeholder="הקלד לחיפוש אזור..." autocomplete="off">
-    <datalist id="areas-list"></datalist>
+    <input id="area-input" placeholder="הקלד לחיפוש אזור..." autocomplete="off" readonly>
+    <div class="dropdown-list" id="dropdown-list"></div>
     <div id="no-areas-note" style="display:none;font-size:0.8rem;color:#888;margin-top:6px;">
       עדיין אין נתונים — הcollector צריך לרוץ כדי לאכלס את רשימת האזורים
     </div>
@@ -188,7 +225,7 @@ body {
 <script>
 const STORAGE_KEY = 'sirencast_area';
 const areaInput = document.getElementById('area-input');
-const areasList = document.getElementById('areas-list');
+const dropdownList = document.getElementById('dropdown-list');
 const statusDot = document.getElementById('status-dot');
 const headerSubtitle = document.getElementById('header-subtitle');
 const resultsDiv = document.getElementById('results');
@@ -196,18 +233,73 @@ const resultsDiv = document.getElementById('results');
 let lastAreasKey = '';
 let pollErrors = 0;
 let lastPollTime = null;
+let allAreas = [];
+
+function renderDropdown(filter) {
+  const q = (filter || '').trim().toLowerCase();
+  const matches = q ? allAreas.filter(a => a.toLowerCase().includes(q)) : allAreas;
+  if (matches.length === 0) {
+    dropdownList.innerHTML = `<div class="dropdown-empty">${q ? 'לא נמצאו תוצאות' : 'עדיין אין אזורים'}</div>`;
+  } else {
+    dropdownList.innerHTML = matches.map(a =>
+      `<div class="dropdown-item" data-value="${a}">${a}</div>`
+    ).join('');
+  }
+}
+
+function openDropdown() {
+  // Switch to editable mode for filtering
+  areaInput.removeAttribute('readonly');
+  areaInput.value = '';
+  renderDropdown('');
+  dropdownList.classList.add('open');
+}
+
+function closeDropdown(restoreValue) {
+  dropdownList.classList.remove('open');
+  areaInput.setAttribute('readonly', '');
+  if (restoreValue !== undefined) {
+    areaInput.value = restoreValue;
+  } else {
+    areaInput.value = getUserArea();
+  }
+}
+
+function selectArea(value) {
+  localStorage.setItem(STORAGE_KEY, value);
+  closeDropdown(value);
+}
+
+areaInput.addEventListener('click', () => {
+  if (dropdownList.classList.contains('open')) {
+    closeDropdown();
+  } else {
+    openDropdown();
+  }
+});
+
+areaInput.addEventListener('input', () => {
+  renderDropdown(areaInput.value);
+  if (!dropdownList.classList.contains('open')) dropdownList.classList.add('open');
+});
+
+dropdownList.addEventListener('mousedown', (e) => {
+  const item = e.target.closest('.dropdown-item');
+  if (item) selectArea(item.dataset.value);
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (!document.getElementById('area-picker').contains(e.target)) {
+    closeDropdown();
+  }
+});
 
 async function loadAreas() {
   try {
     const res = await fetch('/api/areas');
     const data = await res.json();
-    areasList.innerHTML = '';
-    for (const area of data.areas) {
-      const opt = document.createElement('option');
-      opt.value = area;
-      areasList.appendChild(opt);
-    }
-    document.getElementById('no-areas-note').style.display = data.areas.length === 0 ? 'block' : 'none';
+    allAreas = data.areas || [];
+    document.getElementById('no-areas-note').style.display = allAreas.length === 0 ? 'block' : 'none';
   } catch (e) {
     console.error('Failed to load areas:', e);
   }
@@ -215,7 +307,7 @@ async function loadAreas() {
 
 function restoreSelection() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) areaInput.value = saved;
+  areaInput.value = saved || '';
 }
 
 function getUserArea() {
@@ -340,10 +432,6 @@ async function pollLive() {
     }
   }
 }
-
-areaInput.addEventListener('input', () => {
-  localStorage.setItem(STORAGE_KEY, areaInput.value);
-});
 
 loadAreas();
 restoreSelection();
