@@ -66,6 +66,8 @@ def get_history(areas: str = Query('')):
     area_list = [a.strip() for a in areas.split(',') if a.strip()]
     return db.query_historical_counts(area_list)
 
+MAX_LOCATE_KM = 50  # beyond this, consider the user outside Israel
+
 @app.get('/api/locate')
 def locate(lat: float = Query(...), lng: float = Query(...)):
     if not cities_cache:
@@ -76,6 +78,8 @@ def locate(lat: float = Query(...), lng: float = Query(...)):
         if d < best_dist:
             best_dist = d
             best_name = name
+    if best_dist > MAX_LOCATE_KM:
+        return {'area': None, 'distance_km': round(best_dist, 2)}
     return {'area': best_name, 'distance_km': round(best_dist, 2)}
 
 @app.get('/api/area-stats')

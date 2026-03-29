@@ -186,6 +186,28 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Toast */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: #2a2a2a;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 999;
+}
+#toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
 /* Idle area stat card */
 .idle-stat-card {
   padding: 4px 0;
@@ -415,6 +437,7 @@ body {
 </style>
 </head>
 <body>
+<div id="toast"></div>
 <div class="container">
   <div class="header">
     <span class="status-dot" id="status-dot"></span>
@@ -530,7 +553,12 @@ async function loadAreas() {
 
 function restoreSelection() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  areaInput.value = saved || '';
+  if (saved) {
+    areaInput.value = saved;
+  } else {
+    // Default to Tel Aviv center; autoLocate may override this
+    selectArea(DEFAULT_AREA);
+  }
 }
 
 function getUserArea() {
@@ -689,20 +717,29 @@ async function pollLive() {
   }
 }
 
+const DEFAULT_AREA = 'תל אביב - מרכז העיר';
+
+// ── Toast ─────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, durationMs = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), durationMs);
+}
+
 // ── Geolocation ──────────────────────────────────────────
 async function resolveLocation(lat, lng) {
-  // Uses our backend /api/locate which does nearest-city lookup
-  // against tzevaadom's cities.json (1449 exact oref area names + lat/lng)
   const res = await fetch(`/api/locate?lat=${lat}&lng=${lng}`);
   const data = await res.json();
-  return data.area || null;  // exact oref area name, or null
+  return data.area || null;
 }
 
 async function locateMe() {
   const btn = document.getElementById('locate-btn');
   if (!navigator.geolocation) {
-    btn.textContent = '❌';
-    setTimeout(() => { btn.textContent = '📍'; }, 2000);
+    showToast('📍 מיקום לא נתמך בדפדפן זה');
     return;
   }
   btn.classList.add('locating');
@@ -712,22 +749,23 @@ async function locateMe() {
     try {
       const area = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
       btn.classList.remove('locating');
+      btn.textContent = '📍';
       if (area) {
         selectArea(area);
         btn.classList.add('located');
+        showToast(`📍 נמצא: ${area}`);
       } else {
-        btn.textContent = '❓';
-        setTimeout(() => { btn.textContent = '📍'; }, 3000);
+        showToast('📍 לא נמצא אזור התראה קרוב למיקומך');
       }
     } catch (e) {
       btn.classList.remove('locating');
-      btn.textContent = '❌';
-      setTimeout(() => { btn.textContent = '📍'; }, 2000);
+      btn.textContent = '📍';
+      showToast('📍 שגיאה בקבלת המיקום');
     }
   }, () => {
     btn.classList.remove('locating');
-    btn.textContent = '🚫';
-    setTimeout(() => { btn.textContent = '📍'; }, 2000);
+    btn.textContent = '📍';
+    showToast('📍 אין גישה למיקום — אנא אשר גישה בהגדרות');
   }, { timeout: 8000 });
 }
 
