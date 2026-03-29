@@ -300,6 +300,10 @@ body {
   background: #1a2e1a;
   color: #86efac;
 }
+.history-siren-badge.elsewhere {
+  background: #2d2000;
+  color: #fde68a;
+}
 .history-areas-count {
   font-size: 0.8rem;
   color: #666;
@@ -668,8 +672,8 @@ function renderHistory(incidents, selectedArea) {
   section.style.display = 'block';
   list.innerHTML = incidents.map((inc, idx) => {
     const dateStr = formatTs(inc.started_at);
-    const sirenClass = inc.had_siren ? 'yes' : 'no';
-    const sirenText = inc.had_siren ? '🚨 אזעקה' : '✅ ללא אזעקה';
+    const sirenClass = inc.area_got_siren ? 'yes' : (inc.had_siren ? 'elsewhere' : 'no');
+    const sirenText = inc.area_got_siren ? '🚨 אזעקה לאזור זה' : (inc.had_siren ? '⚠️ אזעקה — לא לאזור זה' : '✅ ללא אזעקה');
     const areasCount = `${inc.cat10_areas.length} אזורים`;
 
     const pred = inc.prediction;

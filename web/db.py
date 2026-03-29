@@ -138,6 +138,7 @@ def get_incidents_for_area(area: str) -> list:
             'had_siren': bool(inc['had_siren']),
             'cat10_areas': cat10_areas,
             'cat1_areas': cat1_areas,
+            'area_got_siren': None,  # filled in after area_siren_set is computed
         })
 
     # Sort ascending to compute rolling prediction
@@ -156,6 +157,10 @@ def get_incidents_for_area(area: str) -> list:
         """, [area] + siren_inc_ids).fetchall()
         area_siren_set = {r['incident_id'] for r in rows}
 
+    # Fill in area_got_siren now that we have area_siren_set
+    for item in result:
+        item['area_got_siren'] = item['id'] in area_siren_set
+
     # Rolling prediction: among prior incidents where this area was in cat10,
     # how many had a siren for this area specifically?
     running_total = 0
@@ -164,7 +169,7 @@ def get_incidents_for_area(area: str) -> list:
         item['prediction'] = {'count': running_siren, 'total': running_total}
         # Update counters for the NEXT incident
         running_total += 1
-        if item['id'] in area_siren_set:
+        if item['area_got_siren']:
             running_siren += 1
 
     result.sort(key=lambda x: x['started_at'], reverse=True)
