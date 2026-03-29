@@ -269,8 +269,8 @@ body {
 }
 .history-item-header {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 5px;
   padding: 10px 12px;
   cursor: pointer;
   user-select: none;
@@ -278,12 +278,21 @@ body {
 .history-item-header:hover {
   background: #222;
 }
+.history-header-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.history-header-row2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .history-date {
-  font-size: 0.85rem;
-  color: #aaa;
-  flex: 1;
+  font-size: 0.82rem;
+  color: #666;
   direction: ltr;
-  text-align: right;
+  white-space: nowrap;
 }
 .history-siren-badge {
   font-size: 0.8rem;
@@ -313,6 +322,7 @@ body {
   font-size: 0.75rem;
   color: #555;
   transition: transform 0.2s;
+  margin-right: auto;
 }
 .history-item.open .history-chevron {
   transform: rotate(180deg);
@@ -701,11 +711,15 @@ function renderHistory(incidents, selectedArea) {
     return `
       <div class="history-item" id="hinc-${idx}">
         <div class="history-item-header" onclick="toggleHistory(${idx})">
-          <span class="history-siren-badge ${sirenClass}">${sirenText}</span>
-          ${predHtml}
-          <span class="history-areas-count">${areasCount} באזהרה</span>
-          <span class="history-date">${dateStr}</span>
-          <span class="history-chevron">▼</span>
+          <div class="history-header-row1">
+            <span class="history-chevron">▼</span>
+            <span class="history-siren-badge ${sirenClass}">${sirenText}</span>
+            ${predHtml}
+          </div>
+          <div class="history-header-row2">
+            <span class="history-date" dir="ltr">${dateStr}</span>
+            <span class="history-areas-count">${areasCount} באזהרה</span>
+          </div>
         </div>
         <div class="history-detail">
           <div class="history-detail-label">אזורים באזהרה המוקדמת</div>
