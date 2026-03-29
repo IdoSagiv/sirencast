@@ -73,6 +73,71 @@ def query_historical_counts(areas: list) -> dict:
     conn.close()
     return {'total_matching_incidents': total, 'counts': counts}
 
+def get_incidents_for_area(area: str) -> list:
+    """
+    Return all incidents where the given area appeared in any cat10_snapshot,
+    ordered by started_at DESC.
+    Each entry includes:
+      - id, started_at, had_siren
+      - cat10_areas: areas from the last snapshot
+      - cat1_areas: areas that got the siren (if had_siren)
+    """
+    conn = get_connection()
+
+    incident_rows = conn.execute("""
+        SELECT DISTINCT s.incident_id
+        FROM cat10_snapshots s
+        JOIN cat10_areas a ON a.snapshot_id = s.id
+        WHERE a.area = ?
+    """, [area]).fetchall()
+
+    incident_ids = [r['incident_id'] for r in incident_rows]
+
+    if not incident_ids:
+        conn.close()
+        return []
+
+    result = []
+    for inc_id in incident_ids:
+        inc = conn.execute('SELECT * FROM incidents WHERE id = ?', [inc_id]).fetchone()
+        if not inc:
+            continue
+
+        last_snap = conn.execute("""
+            SELECT id FROM cat10_snapshots WHERE incident_id = ? ORDER BY id DESC LIMIT 1
+        """, [inc_id]).fetchone()
+
+        cat10_areas = []
+        if last_snap:
+            rows = conn.execute(
+                'SELECT area FROM cat10_areas WHERE snapshot_id = ? ORDER BY area',
+                [last_snap['id']]
+            ).fetchall()
+            cat10_areas = [r['area'] for r in rows]
+
+        cat1_areas = []
+        if inc['had_siren']:
+            rows = conn.execute("""
+                SELECT DISTINCT ca.area FROM cat1_areas ca
+                JOIN cat1_alerts cal ON cal.id = ca.alert_id
+                WHERE cal.incident_id = ?
+                ORDER BY ca.area
+            """, [inc_id]).fetchall()
+            cat1_areas = [r['area'] for r in rows]
+
+        result.append({
+            'id': inc['id'],
+            'started_at': inc['started_at'],
+            'had_siren': bool(inc['had_siren']),
+            'cat10_areas': cat10_areas,
+            'cat1_areas': cat1_areas,
+        })
+
+    result.sort(key=lambda x: x['started_at'], reverse=True)
+    conn.close()
+    return result
+
+
 def get_all_known_areas() -> list:
     """Return sorted list of all distinct area strings seen in cat10_areas + cat1_areas."""
     conn = get_connection()
