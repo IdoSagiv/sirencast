@@ -70,8 +70,13 @@ body {
   color: #aaa;
   margin-bottom: 6px;
 }
-.area-picker input {
-  width: 100%;
+.area-picker-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.area-picker-row input {
+  flex: 1;
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid #333;
@@ -79,9 +84,32 @@ body {
   color: #fff;
   font-size: 1rem;
   outline: none;
+  min-width: 0;
 }
-.area-picker input:focus {
+.area-picker-row input:focus {
   border-color: #555;
+}
+#locate-btn {
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#locate-btn:hover {
+  background: #2a2a2a;
+}
+#locate-btn.locating {
+  opacity: 0.5;
+  cursor: wait;
+}
+#locate-btn.located {
+  border-color: #22c55e;
+  color: #22c55e;
 }
 .dropdown-list {
   display: none;
@@ -398,7 +426,10 @@ body {
   </div>
   <div class="area-picker" id="area-picker">
     <label for="area-input">בחר אזור התראה</label>
-    <input id="area-input" placeholder="הקלד לחיפוש אזור..." autocomplete="off" readonly>
+    <div class="area-picker-row">
+      <input id="area-input" placeholder="הקלד לחיפוש אזור..." autocomplete="off" readonly>
+      <button id="locate-btn" onclick="locateMe()" title="אתר לפי מיקום">📍</button>
+    </div>
     <div class="dropdown-list" id="dropdown-list"></div>
     <div id="no-areas-note" style="display:none;font-size:0.8rem;color:#888;margin-top:6px;">
       עדיין אין נתונים — הcollector צריך לרוץ כדי לאכלס את רשימת האזורים
@@ -658,6 +689,90 @@ async function pollLive() {
   }
 }
 
+// ── Geolocation ──────────────────────────────────────────
+function matchCityToAreas(cityName) {
+  if (!cityName || !allAreas.length) return [];
+  // Normalize: strip "-X" suffix (e.g. "תל אביב-יפו" → "תל אביב")
+  const norm = cityName.split('-')[0].split('–')[0].trim();
+  return allAreas.filter(a => {
+    const base = a.includes(' - ') ? a.split(' - ')[0].trim() : a.trim();
+    return base === norm || base.includes(norm) || norm.includes(base);
+  });
+}
+
+async function resolveLocation(lat, lng) {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=he`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'SirenCast/1.0' } });
+  const data = await res.json();
+  const addr = data.address || {};
+  // Try from most specific to least
+  for (const key of ['suburb', 'neighbourhood', 'quarter', 'city_district', 'city', 'town', 'village']) {
+    if (addr[key]) {
+      const matches = matchCityToAreas(addr[key]);
+      if (matches.length > 0) return { city: addr[key], matches };
+    }
+  }
+  return { city: addr.city || addr.town || '', matches: [] };
+}
+
+async function locateMe() {
+  const btn = document.getElementById('locate-btn');
+  if (!navigator.geolocation) {
+    btn.textContent = '❌';
+    setTimeout(() => { btn.textContent = '📍'; }, 2000);
+    return;
+  }
+  btn.classList.add('locating');
+  btn.textContent = '⏳';
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    try {
+      const { city, matches } = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
+      btn.classList.remove('locating');
+
+      if (matches.length === 1) {
+        selectArea(matches[0]);
+        btn.classList.add('located');
+        btn.textContent = '📍';
+      } else if (matches.length > 1) {
+        // Pre-filter dropdown to matching areas
+        areaInput.removeAttribute('readonly');
+        areaInput.value = city.split('-')[0].trim();
+        renderDropdown(areaInput.value);
+        dropdownList.classList.add('open');
+        areaInput.focus();
+        btn.textContent = '📍';
+      } else {
+        btn.textContent = '❓';
+        setTimeout(() => { btn.textContent = '📍'; }, 3000);
+      }
+    } catch (e) {
+      btn.classList.remove('locating');
+      btn.textContent = '❌';
+      setTimeout(() => { btn.textContent = '📍'; }, 2000);
+    }
+  }, () => {
+    btn.classList.remove('locating');
+    btn.textContent = '🚫';
+    setTimeout(() => { btn.textContent = '📍'; }, 2000);
+  }, { timeout: 8000 });
+}
+
+async function autoLocate() {
+  // Auto-locate only if no area is already saved
+  if (getUserArea() || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    try {
+      if (getUserArea()) return; // user selected manually in the meantime
+      const { matches } = await resolveLocation(pos.coords.latitude, pos.coords.longitude);
+      if (matches.length === 1 && !getUserArea()) {
+        selectArea(matches[0]);
+        document.getElementById('locate-btn').classList.add('located');
+      }
+    } catch (_) {}
+  }, () => {}, { timeout: 8000 });
+}
+
 // ── History ──────────────────────────────────────────────
 function formatTs(ts) {
   const d = new Date(ts * 1000);
@@ -754,7 +869,7 @@ selectArea = function(value) {
   loadHistory(value);
 };
 
-loadAreas();
+loadAreas().then(() => autoLocate());
 restoreSelection();
 loadHistory(getUserArea());
 setInterval(pollLive, 1000);
