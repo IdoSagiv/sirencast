@@ -197,6 +197,115 @@ body {
   border-bottom: 1px solid #222;
   font-size: 0.9rem;
 }
+/* History */
+#history-section {
+  margin-top: 20px;
+}
+.history-header {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.history-header span {
+  color: #ccc;
+  font-weight: 600;
+}
+.history-empty {
+  color: #555;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 12px 0;
+}
+.history-item {
+  background: #1a1a1a;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.history-item-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.history-item-header:hover {
+  background: #222;
+}
+.history-date {
+  font-size: 0.85rem;
+  color: #aaa;
+  flex: 1;
+  direction: ltr;
+  text-align: right;
+}
+.history-siren-badge {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.history-siren-badge.yes {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+.history-siren-badge.no {
+  background: #1a2e1a;
+  color: #86efac;
+}
+.history-areas-count {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+}
+.history-chevron {
+  font-size: 0.75rem;
+  color: #555;
+  transition: transform 0.2s;
+}
+.history-item.open .history-chevron {
+  transform: rotate(180deg);
+}
+.history-detail {
+  display: none;
+  padding: 0 12px 12px;
+  border-top: 1px solid #222;
+}
+.history-item.open .history-detail {
+  display: block;
+}
+.history-detail-label {
+  font-size: 0.75rem;
+  color: #666;
+  margin: 8px 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.history-area-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.history-area-tag {
+  font-size: 0.78rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #252525;
+  color: #bbb;
+}
+.history-area-tag.siren {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+.history-area-tag.selected {
+  border: 1px solid #f59e0b;
+  color: #fde68a;
+}
 </style>
 </head>
 <body>
@@ -221,6 +330,10 @@ body {
     <div class="placeholder-text">אין התראה פעילה כרגע</div>
   </div>
   <div id="last-updated" style="text-align:center;font-size:0.75rem;color:#555;margin-top:10px;"></div>
+  <div id="history-section" style="display:none;">
+    <div class="history-header">📋 היסטוריה — <span id="history-area-label"></span></div>
+    <div id="history-list"></div>
+  </div>
 </div>
 <script>
 const STORAGE_KEY = 'sirencast_area';
@@ -433,8 +546,89 @@ async function pollLive() {
   }
 }
 
+// ── History ──────────────────────────────────────────────
+function formatTs(ts) {
+  const d = new Date(ts * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getDate()}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderHistory(incidents, selectedArea) {
+  const section = document.getElementById('history-section');
+  const list = document.getElementById('history-list');
+  document.getElementById('history-area-label').textContent = selectedArea;
+
+  if (!incidents || incidents.length === 0) {
+    section.style.display = 'block';
+    list.innerHTML = '<div class="history-empty">אין אירועים מתועדים עדיין לאזור זה</div>';
+    return;
+  }
+
+  section.style.display = 'block';
+  list.innerHTML = incidents.map((inc, idx) => {
+    const dateStr = formatTs(inc.started_at);
+    const sirenClass = inc.had_siren ? 'yes' : 'no';
+    const sirenText = inc.had_siren ? '🚨 אזעקה' : '✅ ללא אזעקה';
+    const areasCount = `${inc.cat10_areas.length} אזורים`;
+
+    const cat10Tags = inc.cat10_areas.map(a => {
+      const cls = a === selectedArea ? 'selected' : '';
+      return `<span class="history-area-tag ${cls}">${a}</span>`;
+    }).join('');
+
+    const cat1Tags = inc.had_siren
+      ? inc.cat1_areas.map(a => {
+          const cls = a === selectedArea ? 'selected' : 'siren';
+          return `<span class="history-area-tag ${cls}">${a}</span>`;
+        }).join('')
+      : '<span style="color:#555;font-size:0.8rem;">—</span>';
+
+    return `
+      <div class="history-item" id="hinc-${idx}">
+        <div class="history-item-header" onclick="toggleHistory(${idx})">
+          <span class="history-siren-badge ${sirenClass}">${sirenText}</span>
+          <span class="history-areas-count">${areasCount} באזהרה</span>
+          <span class="history-date">${dateStr}</span>
+          <span class="history-chevron">▼</span>
+        </div>
+        <div class="history-detail">
+          <div class="history-detail-label">אזורים באזהרה המוקדמת</div>
+          <div class="history-area-tags">${cat10Tags}</div>
+          <div class="history-detail-label">אזורים שקיבלו אזעקה</div>
+          <div class="history-area-tags">${cat1Tags}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleHistory(idx) {
+  document.getElementById(`hinc-${idx}`).classList.toggle('open');
+}
+
+async function loadHistory(area) {
+  if (!area) {
+    document.getElementById('history-section').style.display = 'none';
+    return;
+  }
+  try {
+    const res = await fetch('/api/incidents?area=' + encodeURIComponent(area));
+    const data = await res.json();
+    renderHistory(data.incidents, area);
+  } catch (e) {
+    console.error('Failed to load history:', e);
+  }
+}
+
+// Trigger history reload when area is selected
+const _origSelectArea = selectArea;
+selectArea = function(value) {
+  _origSelectArea(value);
+  loadHistory(value);
+};
+
 loadAreas();
 restoreSelection();
+loadHistory(getUserArea());
 setInterval(pollLive, 1000);
 pollLive();
 setInterval(() => {

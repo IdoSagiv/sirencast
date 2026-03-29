@@ -26,6 +26,12 @@ def get_history(areas: str = Query('')):
     area_list = [a.strip() for a in areas.split(',') if a.strip()]
     return db.query_historical_counts(area_list)
 
+@app.get('/api/incidents')
+def get_incidents(area: str = Query('')):
+    if not area.strip():
+        return {'incidents': []}
+    return {'incidents': db.get_incidents_for_area(area.strip())}
+
 @app.get('/api/live')
 async def get_live():
     try:
