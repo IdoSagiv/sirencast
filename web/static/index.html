@@ -698,12 +698,12 @@ function renderHistory(incidents, selectedArea) {
       return `<span class="history-area-tag ${cls}">${a}</span>`;
     }).join('');
 
-    const cat1Tags = inc.had_siren
+    const cat1Tags = inc.cat1_areas.length > 0
       ? inc.cat1_areas.map(a => {
           const cls = a === selectedArea ? 'selected' : 'siren';
           return `<span class="history-area-tag ${cls}">${a}</span>`;
         }).join('')
-      : '<span style="color:#555;font-size:0.8rem;">—</span>';
+      : '<span style="color:#555;font-size:0.82rem;">הcollector לא תיעד אזעקות לאירוע זה</span>';
 
     return `
       <div class="history-item" id="hinc-${idx}">
