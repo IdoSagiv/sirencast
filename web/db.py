@@ -114,14 +114,6 @@ def get_incidents_for_area(area: str) -> list:
         conn.close()
         return []
 
-    # Build full registry: all incidents → {started_at, had_siren, cat10_set}
-    # Used to compute predictions (what did history say before each incident)
-    all_incs = conn.execute('SELECT id, started_at, had_siren FROM incidents').fetchall()
-    inc_registry = {}  # id -> (started_at, had_siren, frozenset of areas)
-    for row in all_incs:
-        areas_list = _get_canonical_cat10_areas(conn, row['id'])
-        inc_registry[row['id']] = (row['started_at'], bool(row['had_siren']), frozenset(areas_list))
-
     result = []
     for inc_id in incident_ids:
         inc = conn.execute('SELECT * FROM incidents WHERE id = ?', [inc_id]).fetchone()
@@ -129,8 +121,6 @@ def get_incidents_for_area(area: str) -> list:
             continue
 
         cat10_areas = _get_canonical_cat10_areas(conn, inc_id)
-        this_set = frozenset(cat10_areas)
-        this_ts = inc['started_at']
 
         cat1_areas = []
         if inc['had_siren']:
@@ -142,30 +132,40 @@ def get_incidents_for_area(area: str) -> list:
             """, [inc_id]).fetchall()
             cat1_areas = [r['area'] for r in rows]
 
-        # Prediction: prior incidents with same cat10 set → siren count for area
-        prior_ids = [
-            iid for iid, (ts, _, aset) in inc_registry.items()
-            if iid != inc_id and aset == this_set and ts < this_ts
-        ]
-        if prior_ids:
-            ph = ','.join(['?' for _ in prior_ids])
-            siren_count = conn.execute(f"""
-                SELECT COUNT(DISTINCT cal.incident_id)
-                FROM cat1_alerts cal
-                JOIN cat1_areas ca ON ca.alert_id = cal.id
-                WHERE ca.area = ? AND cal.incident_id IN ({ph})
-            """, [area] + prior_ids).fetchone()[0]
-        else:
-            siren_count = 0
-
         result.append({
             'id': inc['id'],
             'started_at': inc['started_at'],
             'had_siren': bool(inc['had_siren']),
             'cat10_areas': cat10_areas,
             'cat1_areas': cat1_areas,
-            'prediction': {'count': siren_count, 'total': len(prior_ids)},
         })
+
+    # Sort ascending to compute rolling prediction
+    result.sort(key=lambda x: x['started_at'])
+
+    # For each incident: did the selected area specifically get a siren?
+    siren_inc_ids = [r['id'] for r in result if r['had_siren']]
+    area_siren_set = set()
+    if siren_inc_ids:
+        ph = ','.join(['?' for _ in siren_inc_ids])
+        rows = conn.execute(f"""
+            SELECT DISTINCT cal.incident_id
+            FROM cat1_alerts cal
+            JOIN cat1_areas ca ON ca.alert_id = cal.id
+            WHERE ca.area = ? AND cal.incident_id IN ({ph})
+        """, [area] + siren_inc_ids).fetchall()
+        area_siren_set = {r['incident_id'] for r in rows}
+
+    # Rolling prediction: among prior incidents where this area was in cat10,
+    # how many had a siren for this area specifically?
+    running_total = 0
+    running_siren = 0
+    for item in result:
+        item['prediction'] = {'count': running_siren, 'total': running_total}
+        # Update counters for the NEXT incident
+        running_total += 1
+        if item['id'] in area_siren_set:
+            running_siren += 1
 
     result.sort(key=lambda x: x['started_at'], reverse=True)
     conn.close()
