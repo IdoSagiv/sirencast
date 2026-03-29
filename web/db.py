@@ -172,6 +172,52 @@ def get_incidents_for_area(area: str) -> list:
     return result
 
 
+def get_area_stats(area: str) -> dict:
+    """
+    Aggregate stats for a single area:
+    - total_incidents: how many incidents had this area in their cat=10 warning
+    - had_siren_incidents: how many of those had any siren at all
+    - area_siren_count: how many of those had a siren specifically for this area
+    - area_siren_pct: area_siren_count / total_incidents * 100
+    """
+    conn = get_connection()
+
+    # Incidents where this area appeared in any cat10_snapshot
+    inc_rows = conn.execute("""
+        SELECT DISTINCT i.id, i.had_siren
+        FROM incidents i
+        JOIN cat10_snapshots s ON s.incident_id = i.id
+        JOIN cat10_areas a ON a.snapshot_id = s.id
+        WHERE a.area = ?
+    """, [area]).fetchall()
+
+    total = len(inc_rows)
+    if total == 0:
+        conn.close()
+        return {'total_incidents': 0, 'had_siren_incidents': 0, 'area_siren_count': 0, 'area_siren_pct': 0.0}
+
+    had_siren = sum(1 for r in inc_rows if r['had_siren'])
+    siren_inc_ids = [r['id'] for r in inc_rows if r['had_siren']]
+
+    area_siren_count = 0
+    if siren_inc_ids:
+        ph = ','.join(['?' for _ in siren_inc_ids])
+        area_siren_count = conn.execute(f"""
+            SELECT COUNT(DISTINCT cal.incident_id)
+            FROM cat1_alerts cal
+            JOIN cat1_areas ca ON ca.alert_id = cal.id
+            WHERE ca.area = ? AND cal.incident_id IN ({ph})
+        """, [area] + siren_inc_ids).fetchone()[0]
+
+    conn.close()
+    return {
+        'total_incidents': total,
+        'had_siren_incidents': had_siren,
+        'area_siren_count': area_siren_count,
+        'area_siren_pct': round(area_siren_count / total * 100, 1) if total > 0 else 0.0,
+    }
+
+
 def get_all_known_areas() -> list:
     """Return sorted list of all distinct area strings seen in cat10_areas + cat1_areas."""
     conn = get_connection()

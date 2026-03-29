@@ -369,6 +369,7 @@ const headerSubtitle = document.getElementById('header-subtitle');
 const resultsDiv = document.getElementById('results');
 
 let lastAreasKey = '';
+let lastIdleArea = null;
 let pollErrors = 0;
 let lastPollTime = null;
 let allAreas = [];
@@ -458,10 +459,34 @@ function getProgressColor(pct) {
   return '#22c55e';
 }
 
-function renderIdle() {
+function renderIdle(areaStats) {
   statusDot.className = 'status-dot';
   headerSubtitle.textContent = '';
-  resultsDiv.innerHTML = '<div class="placeholder-text">אין התראה פעילה כרגע</div>';
+  if (!areaStats || areaStats.total_incidents === 0) {
+    const msg = areaStats ? 'האזור שנבחר לא הופיע באף אזהרה מתועדת' : 'אין התראה פעילה כרגע';
+    resultsDiv.innerHTML = `<div class="placeholder-text">${msg}</div>`;
+    return;
+  }
+  const s = areaStats;
+  const pct = s.area_siren_pct;
+  const color = pct > 50 ? '#ef4444' : pct > 20 ? '#f59e0b' : '#22c55e';
+  resultsDiv.innerHTML = `
+    <div class="summary-line" style="margin-bottom:16px;">סטטיסטיקות היסטוריות לאזור</div>
+    <div class="area-row">
+      <span class="area-name">הופיע באזהרה מוקדמת</span>
+      <span class="area-fraction" dir="ltr">${s.total_incidents}x</span>
+    </div>
+    <div class="area-row">
+      <span class="area-name">הסתיים באזעקה כלשהי</span>
+      <span class="area-fraction" dir="ltr">${s.had_siren_incidents}/${s.total_incidents}</span>
+    </div>
+    <div class="area-row" style="border-bottom:none;">
+      <span class="area-name" style="font-weight:600;">אזעקה באזור זה ספציפית</span>
+      <span class="area-fraction" dir="ltr" style="color:${color};font-weight:700;">${s.area_siren_count}/${s.total_incidents}</span>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+    </div>`;
 }
 
 function renderCat10(areas, historyData) {
@@ -547,9 +572,20 @@ async function pollLive() {
 
     if (!data.active) {
       lastAreasKey = '';
-      renderIdle();
+      const userArea = getUserArea();
+      if (userArea !== lastIdleArea) {
+        lastIdleArea = userArea;
+        if (userArea) {
+          const statsRes = await fetch('/api/area-stats?area=' + encodeURIComponent(userArea));
+          const stats = await statsRes.json();
+          renderIdle(stats);
+        } else {
+          renderIdle(null);
+        }
+      }
       return;
     }
+    lastIdleArea = null;
 
     if (data.cat === '10') {
       const areasKey = data.areas.join(',');
@@ -655,10 +691,11 @@ async function loadHistory(area) {
   }
 }
 
-// Trigger history reload when area is selected
+// Trigger history + stats reload when area is selected
 const _origSelectArea = selectArea;
 selectArea = function(value) {
   _origSelectArea(value);
+  lastIdleArea = null; // force stats refresh on next poll
   loadHistory(value);
 };
 

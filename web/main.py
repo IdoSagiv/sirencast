@@ -26,6 +26,12 @@ def get_history(areas: str = Query('')):
     area_list = [a.strip() for a in areas.split(',') if a.strip()]
     return db.query_historical_counts(area_list)
 
+@app.get('/api/area-stats')
+def get_area_stats(area: str = Query('')):
+    if not area.strip():
+        return {'total_incidents': 0, 'had_siren_incidents': 0, 'area_siren_count': 0, 'area_siren_pct': 0.0}
+    return db.get_area_stats(area.strip())
+
 @app.get('/api/incidents')
 def get_incidents(area: str = Query('')):
     if not area.strip():
