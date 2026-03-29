@@ -171,16 +171,43 @@ def get_incidents_for_area(area: str) -> list:
     for item in result:
         item['area_got_siren'] = item['id'] in area_siren_set
 
-    # Rolling prediction: among prior incidents where this area was in cat10,
-    # how many had a siren for this area specifically?
+    # General prediction (rolling): among prior incidents where this area was
+    # in ANY cat10 warning, how many had a siren for this area?
     running_total = 0
     running_siren = 0
     for item in result:
-        item['prediction'] = {'count': running_siren, 'total': running_total}
-        # Update counters for the NEXT incident
+        item['prediction_general'] = {'count': running_siren, 'total': running_total}
         running_total += 1
         if item['area_got_siren']:
             running_siren += 1
+
+    # Profile prediction (exact match): among prior incidents with the SAME
+    # canonical (last-snapshot) cat10 area set, how many had a siren for this area?
+    # Build registry: all incidents → (started_at, canonical_set)
+    all_inc_rows = conn.execute('SELECT id, started_at FROM incidents').fetchall()
+    registry = {}  # incident_id -> (started_at, frozenset)
+    for row in all_inc_rows:
+        canonical = _get_canonical_cat10_areas(conn, row['id'])
+        registry[row['id']] = (row['started_at'], frozenset(canonical))
+
+    for item in result:
+        item_ts = item['started_at']
+        item_canonical = frozenset(_get_canonical_cat10_areas(conn, item['id']))
+        prior_ids = [
+            iid for iid, (ts, aset) in registry.items()
+            if iid != item['id'] and aset == item_canonical and ts < item_ts
+        ]
+        if prior_ids:
+            ph = ','.join(['?' for _ in prior_ids])
+            siren_count = conn.execute(f"""
+                SELECT COUNT(DISTINCT cal.incident_id)
+                FROM cat1_alerts cal
+                JOIN cat1_areas ca ON ca.alert_id = cal.id
+                WHERE ca.area = ? AND cal.incident_id IN ({ph})
+            """, [area] + prior_ids).fetchone()[0]
+        else:
+            siren_count = 0
+        item['prediction_profile'] = {'count': siren_count, 'total': len(prior_ids)}
 
     result.sort(key=lambda x: x['started_at'], reverse=True)
     conn.close()

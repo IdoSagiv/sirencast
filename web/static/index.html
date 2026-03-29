@@ -409,6 +409,18 @@ body {
   border: 1px solid #f59e0b;
   color: #fde68a;
 }
+/* Prediction badge groups */
+.pred-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.pred-label {
+  font-size: 0.6rem;
+  color: #555;
+  white-space: nowrap;
+}
 /* Prediction badge */
 .pred-badge {
   font-size: 0.78rem;
@@ -808,15 +820,15 @@ function renderHistory(incidents, selectedArea) {
     const sirenText = inc.area_got_siren ? '🚨 אזעקה לאזור זה' : '✅ ללא אזעקה לאזור זה';
     const areasCount = `${inc.cat10_areas.length} אזורים`;
 
-    const pred = inc.prediction;
-    let predHtml = '';
-    if (pred.total === 0) {
-      predHtml = `<span class="pred-badge pred-unknown" title="אין נתונים היסטוריים קודמים">—</span>`;
-    } else {
+    function makePredBadge(pred, title) {
+      if (pred.total === 0)
+        return `<span class="pred-badge pred-unknown" title="${title}">—</span>`;
       const pct = Math.round(pred.count / pred.total * 100);
-      const predClass = pct > 50 ? 'pred-high' : pct > 20 ? 'pred-mid' : 'pred-low';
-      predHtml = `<span class="pred-badge ${predClass}" title="הסיכוי שחושב בזמן האזהרה">${pred.count}/${pred.total}</span>`;
+      const cls = pct > 50 ? 'pred-high' : pct > 20 ? 'pred-mid' : 'pred-low';
+      return `<span class="pred-badge ${cls}" title="${title}">${pred.count}/${pred.total}</span>`;
     }
+    const predGeneralHtml = makePredBadge(inc.prediction_general, 'כלל אזהרות שכללו אזור זה');
+    const predProfileHtml = makePredBadge(inc.prediction_profile, 'אזהרות עם אותו פרופיל מדויק (כמו בתצוגה החיה)');
 
     const cat10Tags = inc.cat10_areas.map(a => {
       const cls = a === selectedArea ? 'selected' : '';
@@ -836,7 +848,12 @@ function renderHistory(incidents, selectedArea) {
           <div class="history-header-row1">
             <span class="history-chevron">▼</span>
             <span class="history-siren-badge ${sirenClass}">${sirenText}</span>
-            ${predHtml}
+            <span class="pred-group">
+              <span class="pred-label">כללי</span>${predGeneralHtml}
+            </span>
+            <span class="pred-group">
+              <span class="pred-label">פרופיל</span>${predProfileHtml}
+            </span>
           </div>
           <div class="history-header-row2">
             <span class="history-date" dir="ltr">${dateStr}</span>
