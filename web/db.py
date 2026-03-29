@@ -120,23 +120,17 @@ def get_incidents_for_area(area: str) -> list:
         if not inc:
             continue
 
-        # Use the FIRST snapshot where this area appeared (not the last).
-        # Warnings narrow over time — the selected area may be dropped from
-        # later snapshots, making it invisible in its own history row.
-        first_snap = conn.execute("""
-            SELECT s.id FROM cat10_snapshots s
-            JOIN cat10_areas a ON a.snapshot_id = s.id
-            WHERE s.incident_id = ? AND a.area = ?
-            ORDER BY s.id ASC LIMIT 1
-        """, [inc_id, area]).fetchone()
-
-        cat10_areas = []
-        if first_snap:
-            rows = conn.execute(
-                'SELECT area FROM cat10_areas WHERE snapshot_id = ? ORDER BY area',
-                [first_snap['id']]
-            ).fetchall()
-            cat10_areas = [r['area'] for r in rows]
+        # Union of ALL areas across ALL cat10 snapshots for this incident.
+        # Warnings narrow over time, so the selected area may disappear from
+        # later snapshots. The union gives the complete accumulated picture.
+        rows = conn.execute("""
+            SELECT DISTINCT a.area
+            FROM cat10_areas a
+            JOIN cat10_snapshots s ON s.id = a.snapshot_id
+            WHERE s.incident_id = ?
+            ORDER BY a.area
+        """, [inc_id]).fetchall()
+        cat10_areas = [r['area'] for r in rows]
 
         cat1_areas = []
         if inc['had_siren']:
