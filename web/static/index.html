@@ -158,9 +158,47 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.stat-label {
-  flex: 1;
-  font-size: 0.95rem;
+/* Idle area stat card */
+.idle-stat-card {
+  padding: 4px 0;
+}
+.idle-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+.idle-stat-label {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+.idle-stat-value {
+  font-size: 0.9rem;
+  color: #ccc;
+  font-weight: 600;
+  direction: ltr;
+}
+.idle-stat-divider {
+  border-top: 1px solid #2a2a2a;
+  margin: 10px 0;
+}
+.idle-stat-main-label {
+  font-size: 0.85rem;
+  color: #888;
+  margin-bottom: 6px;
+}
+.idle-stat-big {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+}
+.idle-stat-pct {
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-top: 2px;
+  direction: ltr;
 }
 .area-fraction {
   font-size: 0.8rem;
@@ -474,20 +512,18 @@ function renderIdle(areaStats) {
   const s = areaStats;
   const pct = s.area_siren_pct;
   const color = pct > 50 ? '#ef4444' : pct > 20 ? '#f59e0b' : '#22c55e';
+  const pctLabel = s.total_incidents > 0 ? `${pct}%` : '';
   resultsDiv.innerHTML = `
-    <div class="summary-line" style="margin-bottom:16px;">סטטיסטיקות היסטוריות לאזור</div>
-    <div class="area-row">
-      <span class="stat-label">הופיע באזהרה מוקדמת</span>
-      <span class="area-fraction" dir="ltr">${s.total_incidents}x</span>
-    </div>
-    <div class="area-row">
-      <span class="stat-label">הסתיים באזעקה כלשהי</span>
-      <span class="area-fraction" dir="ltr">${s.had_siren_incidents}/${s.total_incidents}</span>
-    </div>
-    <div class="area-row" style="border-bottom:none;">
-      <span class="stat-label" style="font-weight:600;">אזעקה באזור זה ספציפית</span>
-      <span class="area-fraction" dir="ltr" style="color:${color};font-weight:700;">${s.area_siren_count}/${s.total_incidents}</span>
-      <div class="progress-bar">
+    <div class="idle-stat-card">
+      <div class="idle-stat-row">
+        <span class="idle-stat-label">הופיע באזהרות מוקדמות</span>
+        <span class="idle-stat-value">${s.total_incidents}</span>
+      </div>
+      <div class="idle-stat-divider"></div>
+      <div class="idle-stat-main-label">קיבל אזעקה ספציפית לאזור</div>
+      <div class="idle-stat-big" style="color:${color}" dir="ltr">${s.area_siren_count} / ${s.total_incidents}</div>
+      <div class="idle-stat-pct" style="color:${color}">${pctLabel}</div>
+      <div class="progress-bar" style="width:100%;margin-top:8px;">
         <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
       </div>
     </div>`;
