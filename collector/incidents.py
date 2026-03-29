@@ -85,10 +85,21 @@ class IncidentTracker:
 
         elif self.state == COOLING:
             if cat == "10":
-                self._close_incident(now)
-                self._open_incident(alert, now)
+                # Re-activate the same incident — new cat=10 within the window
+                # is part of the same event, not a new one.
+                self.cat10_ended = None
+                self.db.execute(
+                    "UPDATE incidents SET cat10_ended=NULL WHERE id=?",
+                    (self.incident_id,),
+                )
+                self.db.commit()
+                self.last_cat1_oref_id = None
+                self._store_snapshot(alert, now)
                 self.state = CAT10_ACTIVE
-                logging.info(f"Incident #{self.incident_id} opened (after closing previous)")
+                logging.info(
+                    f"Incident #{self.incident_id} re-activated from COOLING "
+                    f"(new cat=10 within {config.SIREN_LINKAGE_WINDOW_SECONDS}s window)"
+                )
             elif cat == "1":
                 self._link_cat1(alert, now)
             elif cat is None:
