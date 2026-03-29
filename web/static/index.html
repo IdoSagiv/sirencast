@@ -306,6 +306,31 @@ body {
   border: 1px solid #f59e0b;
   color: #fde68a;
 }
+/* Prediction badge */
+.pred-badge {
+  font-size: 0.78rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  direction: ltr;
+}
+.pred-unknown {
+  background: #222;
+  color: #555;
+}
+.pred-low {
+  background: #14532d;
+  color: #86efac;
+}
+.pred-mid {
+  background: #78350f;
+  color: #fde68a;
+}
+.pred-high {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
 </style>
 </head>
 <body>
@@ -571,6 +596,16 @@ function renderHistory(incidents, selectedArea) {
     const sirenText = inc.had_siren ? '🚨 אזעקה' : '✅ ללא אזעקה';
     const areasCount = `${inc.cat10_areas.length} אזורים`;
 
+    const pred = inc.prediction;
+    let predHtml = '';
+    if (pred.total === 0) {
+      predHtml = `<span class="pred-badge pred-unknown" title="אין נתונים היסטוריים קודמים">—</span>`;
+    } else {
+      const pct = Math.round(pred.count / pred.total * 100);
+      const predClass = pct > 50 ? 'pred-high' : pct > 20 ? 'pred-mid' : 'pred-low';
+      predHtml = `<span class="pred-badge ${predClass}" title="הסיכוי שחושב בזמן האזהרה">${pred.count}/${pred.total}</span>`;
+    }
+
     const cat10Tags = inc.cat10_areas.map(a => {
       const cls = a === selectedArea ? 'selected' : '';
       return `<span class="history-area-tag ${cls}">${a}</span>`;
@@ -587,6 +622,7 @@ function renderHistory(incidents, selectedArea) {
       <div class="history-item" id="hinc-${idx}">
         <div class="history-item-header" onclick="toggleHistory(${idx})">
           <span class="history-siren-badge ${sirenClass}">${sirenText}</span>
+          ${predHtml}
           <span class="history-areas-count">${areasCount} באזהרה</span>
           <span class="history-date">${dateStr}</span>
           <span class="history-chevron">▼</span>
