@@ -1,14 +1,54 @@
 import json
 import logging
+import math
+import os
+import httpx
 from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import httpx
 
 from web import db
+from collector import config
 
 logger = logging.getLogger(__name__)
 app = FastAPI(title='SirenCast')
+
+CITIES_URL = 'https://www.tzevaadom.co.il/static/cities.json'
+cities_cache: dict = {}  # name -> {lat, lng}
+
+def haversine_km(lat1, lng1, lat2, lng2) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+async def load_cities():
+    global cities_cache
+    # Try local file first (data/cities.json), then fetch from tzevaadom
+    local_path = os.path.join(config.DATA_DIR, 'cities.json')
+    try:
+        if os.path.exists(local_path):
+            with open(local_path, encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(CITIES_URL, headers={'User-Agent': 'SirenCast/1.0'}, timeout=10)
+            data = r.json()
+            with open(local_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False)
+        cities_cache = {
+            name: {'lat': c['lat'], 'lng': c['lng']}
+            for name, c in data.get('cities', {}).items()
+            if 'lat' in c and 'lng' in c
+        }
+        logger.info(f'Loaded {len(cities_cache)} cities for location lookup')
+    except Exception as e:
+        logger.warning(f'Failed to load cities data: {e}')
+
+@app.on_event('startup')
+async def startup():
+    await load_cities()
 
 OREF_URL = 'https://www.oref.org.il/warningMessages/alert/alerts.json'
 OREF_HEADERS = {
@@ -25,6 +65,18 @@ def list_areas():
 def get_history(areas: str = Query('')):
     area_list = [a.strip() for a in areas.split(',') if a.strip()]
     return db.query_historical_counts(area_list)
+
+@app.get('/api/locate')
+def locate(lat: float = Query(...), lng: float = Query(...)):
+    if not cities_cache:
+        return {'area': None, 'distance_km': None}
+    best_name, best_dist = None, float('inf')
+    for name, c in cities_cache.items():
+        d = haversine_km(lat, lng, c['lat'], c['lng'])
+        if d < best_dist:
+            best_dist = d
+            best_name = name
+    return {'area': best_name, 'distance_km': round(best_dist, 2)}
 
 @app.get('/api/area-stats')
 def get_area_stats(area: str = Query('')):
